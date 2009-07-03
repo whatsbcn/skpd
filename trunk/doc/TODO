@@ -1,0 +1,2 @@
+ * Use core dumps to generate the ELF file
+ * Remove dependece of /proc

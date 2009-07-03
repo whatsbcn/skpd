@@ -1,0 +1,8 @@
+Generate core dump with "gdb> gcore"
+
+http://manugarg.googlepages.com/aboutelfauxiliaryvectors
+http://adimitrov.net/main/viewcore/coredump_paper.pdf
+http://adimitrov.net/main/viewcore/src/output-0.1-2.txt
+http://em386.blogspot.com/2006/10/resolving-elf-relocation-name-symbols.html
+
+LD_SHOW_AUXV=1 id
