@@ -23,7 +23,7 @@
 #include <stdarg.h>
 #include <elf.h>
 
-#ifdef __x86_64
+#if __x86_64
 #define ElfX_auxv_t Elf64_auxv_t
 #define ElfX_Dyn Elf64_Dyn
 #define ElfX_Ehdr Elf64_Ehdr
@@ -31,10 +31,9 @@
 #define ElfX_Shdr Elf64_Shdr
 #define ElfX_Sym Elf64_Sym
 #define uintX_t uint64_t
-#define BSIZE 8
 #endif
 
-#ifdef __i386__
+#if __i386__ || __MIPSEL__ 
 #define ElfX_auxv_t Elf32_auxv_t
 #define ElfX_Dyn Elf32_Dyn
 #define ElfX_Ehdr Elf32_Ehdr
@@ -42,7 +41,6 @@
 #define ElfX_Shdr Elf32_Shdr
 #define ElfX_Sym Elf32_Sym
 #define uintX_t uint32_t
-#define BSIZE 4
 #endif
 
 // Represents a memory range used by the program
@@ -59,6 +57,7 @@ struct ph {
 int attached = 0;
 int verbose = 0;
 int pid = 0;
+int ptrsize = 0;
 
 void spam() {
     printf("skpd 1.1 - <whats[@t]wekk.net>\n"
@@ -115,17 +114,17 @@ void quit(char * format, ...){
 
 // Signal handler
 static void die(int val) {
-    printf(" [!] Received signal %d!", val);
+    printf(" [!] Received signal %d!\n", val);
     if (attached) detach();
     exit (-1);
 }
 
-void mread(unsigned long int addr, unsigned long int size, unsigned int *dest){
+void mread(unsigned long addr, unsigned int size, unsigned long *dest){
     int c = 0;
     bzero(dest, size);
     errno = 0;
     debug("  => mread addr:0x%lx, size:%ld bytes, dest:%p\n", addr, size, dest);
-    for (c = 0; c < size; c++) {
+    for (c = 0; c < size/4; c++) {
         dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*4, 0);
         if(errno != 0) {
             printf("  => 0x%lx ", addr+c); fflush(stdout);
@@ -135,13 +134,13 @@ void mread(unsigned long int addr, unsigned long int size, unsigned int *dest){
     }
 } 
 
-void stackread(unsigned long int addr, unsigned long int size, unsigned long int *dest){
+void stackread(unsigned long addr, unsigned int size, unsigned long *dest){
     int c = 0;
     bzero(dest, size);
     errno = 0;
     debug("  => mread addr:0x%lx, size:%ld bytes, dest:%p\n", addr, size, dest);
-    for (c = 0; c*BSIZE < size; c++) {
-        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*BSIZE, 0);
+    for (c = 0; c*ptrsize < size; c++) {
+        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*ptrsize, 0);
         if(errno != 0) {
             printf("  => 0x%lx ", addr+c); fflush(stdout);
             perror("ptrace");
@@ -150,7 +149,7 @@ void stackread(unsigned long int addr, unsigned long int size, unsigned long int
     }
 } 
 
-int readmaps(unsigned long int *stacktop, unsigned long int *stackbase, unsigned long int *stacksize, struct mentry **maps) {
+int readmaps(unsigned long *stacktop, unsigned long *stackbase, unsigned long *stacksize, struct mentry **maps) {
     unsigned long addr, endaddr;
     unsigned int lines = 0, i = 0;
     char perm[5], buff[256], filename[256];
@@ -185,7 +184,7 @@ int readmaps(unsigned long int *stacktop, unsigned long int *stackbase, unsigned
 }
 
 // Find auxv on stack
-int find_auxv(unsigned long int *stack, unsigned int size,  struct ph **vauxv){
+int find_auxv(unsigned long *stack, unsigned int size,  struct ph **vauxv){
     char *ptr = (char *)stack;
     unsigned int i = 0;
     *vauxv = malloc(sizeof(struct ph)*4);
@@ -234,21 +233,21 @@ int check_range(struct ph *vauxv, unsigned int iauxv, struct mentry *maps, unsig
 
 int main(int argc, char *argv[]) {
     int opt;
-    unsigned long int stacktop, stackbase, stacksize, nmaps, nauxv;
-    unsigned int i, j, filesize = 0, dynamic = 0, base_addr, data_addr;
-    //unsigned int stacktop, stackbase, stacksize, nmaps, nauxv, i, j, filesize = 0, dynamic = 0, base_addr, data_addr;
-    unsigned long int *stack;    
+    unsigned long stacktop, stackbase, stacksize, nmaps, nauxv;
+    unsigned int i, j, filesize = 0, dynamic = 0, base_addr = 0, data_addr = 0;
+    unsigned long *buff;    
     struct ph *vauxv;
     struct mentry *maps;
     char *newelf = 0, *outfile = 0;
     FILE *fp;
+    ptrsize = sizeof(int *);
 
-    ElfX_Ehdr *ehdr;
-    ElfX_Phdr *phdr;
+    Elf32_Ehdr *ehdr;
+    Elf32_Phdr *phdr;
     uintX_t adata;
     int plt_off;
 
-    ElfX_Dyn  *dyn;   // Pointer to Dynamic array
+    Elf32_Dyn  *dyn;   // Pointer to Dynamic array
     int f = 0;                
     spam();
 
@@ -278,20 +277,20 @@ int main(int argc, char *argv[]) {
     if (!(nmaps = readmaps(&stacktop, &stackbase, &stacksize, &maps))) quit(" [!] Stack not found.\n");
     printf(" [*] Found %ld maps.\n", nmaps);
 
-    stack = malloc(stacksize);
-    if (!stack) quit(" [!] Malloc error.\n");
-    stackread(stacktop, stacksize, stack);
+    buff = malloc(stacksize);
+    if (!buff) quit(" [!] Malloc error.\n");
+    stackread(stacktop, stacksize, buff);
 
-	if (!(nauxv = find_auxv(stack, stacksize, &vauxv))) quit(" [!] Auxiliar vector not found.\n");
+	if (!(nauxv = find_auxv(buff, stacksize, &vauxv))) quit(" [!] Auxiliar vector not found.\n");
     printf(" [*] Found %ld possible auxv.\n", nauxv);
 
     for (i = 0; i < nauxv && !check_range(vauxv, i, maps, nmaps); i++);
     if (i == nauxv) quit(" [!] All the auxv are out of range.\n");
     printf(" [*] Auxv selected: off:0x%lx num:0x%x\n", vauxv[i].off, vauxv[i].num);
-
-    stack = realloc(stack, vauxv[i].num*sizeof(ElfX_Phdr));
-    mread(vauxv[i].off, vauxv[i].num*sizeof(ElfX_Phdr), (unsigned int *)stack);
-    phdr = (ElfX_Phdr *)stack;
+    
+    buff = realloc(buff, vauxv[i].num*sizeof(ElfX_Phdr));
+    mread(vauxv[i].off, vauxv[i].num*sizeof(ElfX_Phdr), (unsigned long *)buff);
+    phdr = (ElfX_Phdr *)buff;
 
     for (j = 0; j < vauxv[i].num; j++){
         switch(phdr[j].p_type){
@@ -301,7 +300,7 @@ int main(int argc, char *argv[]) {
                     filesize = phdr[j].p_offset + phdr[j].p_filesz;
                     newelf = realloc(newelf, filesize);
                 } 
-                mread(phdr[j].p_vaddr, phdr[j].p_filesz/4, (unsigned int *)(phdr[j].p_offset + newelf));
+                mread(phdr[j].p_vaddr, phdr[j].p_filesz, (unsigned long *)(phdr[j].p_offset + newelf));
                 break;
             case PT_DYNAMIC:
                 dynamic = j;
@@ -342,17 +341,17 @@ int main(int argc, char *argv[]) {
                 case DT_PLTGOT:
 					debug("  => Fixing .got.plt section.\n");
 					// Clean the two addr on .got.plt, that are at offset + one addr
-                    memset(&newelf[dyn[j].d_un.d_ptr - data_addr + BSIZE], 0, BSIZE*2);
+                    memset(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize], 0, ptrsize*2);
 
-                    f = BSIZE*3;
+                    f = ptrsize*3;
                     memcpy (&adata, &newelf[dyn[j].d_un.d_ptr-data_addr+f], sizeof(adata));
 
                     while (adata != 0) {
 						if (adata  < phdr[dynamic].p_vaddr+filesize){
-                            adata = adata - 0x10*((f/BSIZE)-3);
+                            adata = adata - 0x10*((f/ptrsize)-3);
                             goto plt;
                         }
-                        f += BSIZE;
+                        f += ptrsize;
                         memcpy(&adata, &newelf[dyn[j].d_un.d_ptr - data_addr + f], sizeof(adata));
                         if ((f>1200)) {
                             printf (" [!] .rel.plt not found.\n");
@@ -363,14 +362,14 @@ int main(int argc, char *argv[]) {
                     plt_off = adata;
                     debug("  => Fixing .rel.plt section.\n");
 
-                    f = BSIZE*3;
+                    f = ptrsize*3;
                     memcpy (&adata, &newelf[dyn[j].d_un.d_ptr - data_addr + f], sizeof(adata));
                     while (adata != 0) {
-                        if (adata != plt_off+0x10*((f/BSIZE)-3)){
-                            adata = plt_off+0x10*((f/BSIZE)-3);
+                        if (adata != plt_off+0x10*((f/ptrsize)-3)){
+                            adata = plt_off+0x10*((f/ptrsize)-3);
                             memcpy(&newelf[dyn[j].d_un.d_ptr-data_addr+f], &adata, sizeof(adata));
                         }
-                        f += BSIZE;
+                        f += ptrsize;
                         memcpy (&adata, &newelf[dyn[j].d_un.d_ptr-data_addr+f], sizeof(adata));
                     }
                     break;
@@ -389,7 +388,7 @@ int main(int argc, char *argv[]) {
         printf(" [*] File %s saved!\n", outfile);
     } 
     free(maps);
-    free(stack);
+    free(buff);
     free(newelf);
     quit (" [*] Done!\n");
     return 0;
