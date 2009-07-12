@@ -24,7 +24,11 @@
 #include <elf.h>
 
 #if __x86_64__
+#if __linux__
 #define ElfX_auxv_t Elf64_auxv_t
+#else
+#define ElfX_auxv_t Elf64_Auxinfo
+#endif
 #define ElfX_Dyn Elf64_Dyn
 #define ElfX_Ehdr Elf64_Ehdr
 #define ElfX_Phdr Elf64_Phdr
@@ -34,7 +38,11 @@
 #endif
 
 #if __i386__ || __MIPSEL__ 
+#if __linux__
 #define ElfX_auxv_t Elf32_auxv_t
+#else
+#define ElfX_auxv_t Elf32_Auxinfo
+#endif
 #define ElfX_Dyn Elf32_Dyn
 #define ElfX_Ehdr Elf32_Ehdr
 #define ElfX_Phdr Elf32_Phdr
@@ -82,7 +90,7 @@ void usage (char *prg){
 
 void attach(){
     int status;
-    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1){
+    if (ptrace(PT_ATTACH, pid, 0, 0) == -1){
         printf (" [!] Can't attach pid %d\n", pid); fflush(stdout);
         exit (-1);
     } 
@@ -93,7 +101,7 @@ void attach(){
 
 void detach(){
     int status;
-    if (ptrace(PTRACE_DETACH, pid , 0, 0) == -1){
+    if (ptrace(PT_DETACH, pid , (void *)0x01, 0) == -1){
         printf (" [!] can't dettach pid %d\n", pid); fflush(stdout);
         exit (-1);
     } 
@@ -125,7 +133,7 @@ void mread(unsigned long addr, unsigned int size, unsigned long *dest){
     errno = 0;
     debug("  => mread addr:0x%lx, size:%ld bytes, dest:%p\n", addr, size, dest);
     for (c = 0; c < size/ptrsize; c++) {
-        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*ptrsize, 0);
+        dest[c] = ptrace(PT_READ_D, pid, (void *)addr+c*ptrsize, 0);
         if(errno != 0) {
             printf("  => 0x%lx ", addr+c); fflush(stdout);
             perror("ptrace");
@@ -140,7 +148,7 @@ void stackread(unsigned long addr, unsigned int size, unsigned long *dest){
     errno = 0;
     debug("  => mread addr:0x%lx, size:%ld bytes, dest:%p\n", addr, size, dest);
     for (c = 0; c*ptrsize < size; c++) {
-        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*ptrsize, 0);
+        dest[c] = ptrace(PT_READ_D, pid, (void *)addr+c*ptrsize, 0);
         if(errno != 0) {
             printf("  => 0x%lx ", addr+c); fflush(stdout);
             perror("ptrace");
@@ -151,33 +159,68 @@ void stackread(unsigned long addr, unsigned int size, unsigned long *dest){
 
 int readmaps(unsigned long *stacktop, unsigned long *stackbase, unsigned long *stacksize, struct mentry **maps) {
     unsigned long addr, endaddr;
-    unsigned int lines = 0, i = 0;
+    unsigned int lines = 0, i = 0, line = 0;
     char perm[5], buff[256], filename[256];
 
     sprintf(filename, "/proc/%d/maps", pid);
-    printf(" [*] Reading %s ...\n", filename);
     FILE *file= fopen(filename, "r");
 
-    while (fscanf(file, "%[^\n]\n", buff) != EOF) lines++;
-    rewind(file);
-    *maps = (struct mentry *)malloc(lines*sizeof(struct mentry));
+    // maps in linux
+    if (file) {
+        printf(" [*] Reading %s ...\n", filename);
+
+        while (fscanf(file, "%[^\n]\n", buff) != EOF) lines++;
+        rewind(file);
+        *maps = (struct mentry *)malloc(lines*sizeof(struct mentry));
  
-    while (fscanf(file, "%lx-%lx %s%[^\n]\n", &addr, &endaddr, perm, buff) != EOF) {
-        if (strstr(buff, "[stack]")) {
-            fclose(file);
-            *stacktop = addr;
-            *stackbase = endaddr;
-            *stacksize = (endaddr-addr);
-            (*maps)[i].top = addr;
-            (*maps)[i].base = endaddr;
-            debug("  => Stack found on: 0x%lx-0x%lx (%ld bytes)\n", addr, endaddr, *stacksize); 
-            return lines;
-        } else {
-            (*maps)[i].top = addr;
-            (*maps)[i].base = endaddr;
-            //debug("  => Saved top: %p base: %p\n", (*maps)[i].top, (*maps)[i].base);
-            i++;
-        } 
+        while (fscanf(file, "%lx-%lx %s%[^\n]\n", &addr, &endaddr, perm, buff) != EOF) {
+            if (strstr(buff, "[stack]")) {
+                fclose(file);
+                *stacktop = addr;
+                *stackbase = endaddr;
+                *stacksize = (endaddr-addr);
+                (*maps)[i].top = addr;
+                (*maps)[i].base = endaddr;
+                debug("  => Stack found on: 0x%lx-0x%lx (%ld bytes)\n", addr, endaddr, *stacksize); 
+                return lines;
+            } else {
+                (*maps)[i].top = addr;
+                (*maps)[i].base = endaddr;
+                //debug("  => Saved top: %p base: %p\n", (*maps)[i].top, (*maps)[i].base);
+                i++;
+            } 
+        }
+    // maps in BSD
+    } else {
+        sprintf(filename, "/proc/%d/map", pid);
+        file= fopen(filename, "r");
+        if (!file) return 0;
+        
+        printf(" [*] Reading %s ...\n", filename);
+
+        while (fscanf(file, "%[^\n]\n", buff) != EOF) lines++;
+        rewind(file);
+        *maps = (struct mentry *)malloc(lines*sizeof(struct mentry));
+
+        while (fscanf(file, "%lx %lx %s%[^\n]\n", &addr, &endaddr, perm, buff) != EOF) {
+            if (line == lines - 1) {
+                fclose(file);
+                *stacktop = addr;
+                *stackbase = endaddr;
+                *stacksize = (endaddr-addr);
+                (*maps)[i].top = addr;
+                (*maps)[i].base = endaddr;
+                debug("  => Stack found on: 0x%lx-0x%lx (%ld bytes)\n", addr, endaddr, *stacksize);
+                return lines;
+            } else {
+                (*maps)[i].top = addr;
+                (*maps)[i].base = endaddr;
+                //debug("  => Saved top: %p base: %p\n", (*maps)[i].top, (*maps)[i].base);
+                i++;
+            }
+            line++;
+        }
+
     }
     fclose(file);
     return 0;
@@ -191,13 +234,14 @@ int find_auxv(unsigned long *stack, unsigned int size,  struct ph **vauxv){
     bzero(*vauxv, sizeof(struct ph)*4);
 
     ElfX_auxv_t *auxv;
+    ElfX_auxv_t *auxv2 = 0;
     auxv = (ElfX_auxv_t *)ptr;
     while (ptr < (char *)stack+size-sizeof(ElfX_auxv_t)) {
         while (auxv->a_type != 6 && auxv->a_un.a_val != 1000 && ptr < (char*)stack+size-sizeof(ElfX_auxv_t)) {
             ptr++;
             auxv = (ElfX_auxv_t *)ptr;
+            auxv2 = auxv;
         }
-
         for (auxv++; auxv < (ElfX_auxv_t *)((char*)stack+size-sizeof(ElfX_auxv_t)) && auxv->a_un.a_val != AT_NULL; auxv++) {
             if ( auxv->a_type == AT_PHDR) {
                 debug("  => AT_PHDR is: 0x%x\n" ,auxv->a_un.a_val);
@@ -211,6 +255,23 @@ int find_auxv(unsigned long *stack, unsigned int size,  struct ph **vauxv){
                 (*vauxv)[2].num = (*vauxv)[1].num;
                 (*vauxv)[1].num = (*vauxv)[0].num;
                 (*vauxv)[0].num = auxv->a_un.a_val;
+                i++;
+            }
+        }
+        
+        for (auxv2--; auxv2 < (ElfX_auxv_t *)((char*)stack+size-sizeof(ElfX_auxv_t)) && auxv2->a_un.a_val != AT_NULL; auxv2--) {
+            if ( auxv2->a_type == AT_PHNUM) {
+                debug("  => AT_PHNUM is: 0x%x\n" ,auxv2->a_un.a_val);
+                (*vauxv)[3].num = (*vauxv)[2].num;
+                (*vauxv)[2].num = (*vauxv)[1].num;
+                (*vauxv)[1].num = (*vauxv)[0].num;
+                (*vauxv)[0].num = auxv2->a_un.a_val;
+            } else if ( auxv2->a_type == AT_PHDR) {
+                debug("  => AT_PHDR is: 0x%x\n" ,auxv2->a_un.a_val);
+                (*vauxv)[3].off = (*vauxv)[2].off;
+                (*vauxv)[2].off = (*vauxv)[1].off;
+                (*vauxv)[1].off = (*vauxv)[0].off;
+                (*vauxv)[0].off = auxv2->a_un.a_val;
                 i++;
             }
         }
@@ -279,7 +340,7 @@ int main(int argc, char *argv[]) {
 		sleep(1);
     }
     
-    if (!pid) quit(" [!] Uknown pid or file.");
+    if (!pid) quit(" [!] Uknown pid or file.\n");
 
     signal(SIGILL, die);
     signal(SIGBUS, die);
@@ -290,7 +351,7 @@ int main(int argc, char *argv[]) {
 
     attach();
     if (!(nmaps = readmaps(&stacktop, &stackbase, &stacksize, &maps))) quit(" [!] Stack not found.\n");
-    debug(" [*] Found %ld maps.\n", nmaps);
+    else debug(" [*] Found %ld maps.\n", nmaps);
 
     buff = malloc(stacksize);
     if (!buff) quit(" [!] Malloc error.\n");
@@ -301,6 +362,7 @@ int main(int argc, char *argv[]) {
 
     for (i = 0; i < nauxv && !check_range(vauxv, i, maps, nmaps); i++);
     if (i == nauxv) quit(" [!] All the auxv are out of range.\n");
+
     debug(" [*] Auxv selected: off:0x%lx num:0x%x\n", vauxv[i].off, vauxv[i].num);
     
     buff = realloc(buff, vauxv[i].num*sizeof(ElfX_Phdr));
@@ -392,7 +454,7 @@ int main(int argc, char *argv[]) {
 #endif
 #if __MIPSEL__
 					debug("  => I can't fix .got section on MIPS, hacking it.\n");
-					debug("  !! This file can be only executed in this system.\n");
+					debug(" [!] This file can be only executed in this system.\n");
                     memcpy(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize*2], &base_addr, ptrsize);
                     goto end;
 #endif
