@@ -349,22 +349,28 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, die);
     signal(SIGSEGV, die);
 
+    // attach to process
     attach();
+
+    // read process maps through /proc
     if (!(nmaps = readmaps(&stacktop, &stackbase, &stacksize, &maps))) quit(" [!] Stack not found.\n");
     else debug(" [*] Found %ld maps.\n", nmaps);
 
+    // dump stack
     buff = malloc(stacksize);
     if (!buff) quit(" [!] Malloc error.\n");
     stackread(stacktop, stacksize, buff);
 
+    // found PHDR in stack
 	if (!(nauxv = find_auxv(buff, stacksize, &vauxv))) quit(" [!] Auxiliar vector not found.\n");
     debug(" [*] Found %ld possible auxv.\n", nauxv);
 
+    // check that it is a valid PHDR
     for (i = 0; i < nauxv && !check_range(vauxv, i, maps, nmaps); i++);
     if (i == nauxv) quit(" [!] All the auxv are out of range.\n");
-
     debug(" [*] Auxv selected: off:0x%lx num:0x%x\n", vauxv[i].off, vauxv[i].num);
-    
+   
+    // use the PHDR to found PT_LOAD sections 
     buff = realloc(buff, vauxv[i].num*sizeof(ElfX_Phdr));
     mread(vauxv[i].off, vauxv[i].num*sizeof(ElfX_Phdr), (unsigned long *)buff);
     phdr = (ElfX_Phdr *)buff;
@@ -372,6 +378,7 @@ int main(int argc, char *argv[]) {
     for (j = 0; j < vauxv[i].num; j++){
         switch(phdr[j].p_type){
             case PT_LOAD:
+                // dump all the binary
                 debug("  => Found section %d type PT_LOAD\n", j);
                 if (filesize < phdr[j].p_offset + phdr[j].p_filesz){
                     filesize = phdr[j].p_offset + phdr[j].p_filesz;
@@ -380,6 +387,7 @@ int main(int argc, char *argv[]) {
                 mread(phdr[j].p_vaddr, phdr[j].p_filesz, (unsigned long *)(phdr[j].p_offset + newelf));
                 break;
             case PT_DYNAMIC:
+                // it is a dynamic executable
                 dynamic = j;
                 debug("  => Found section %d type PT_DYNAMIC\n", j);
                 break;
@@ -388,21 +396,26 @@ int main(int argc, char *argv[]) {
         }
     } 
 
+    // remove sections from ELF headers
     printf(" [*] Rebuilding ELF headers.\n");
     ehdr = (ElfX_Ehdr *)newelf;
     ehdr->e_shoff = 0;
     ehdr->e_shstrndx = 0;
     ehdr->e_shnum = 0;
 
+    // start working with the new ELF
     phdr = (ElfX_Phdr *)(newelf + ehdr->e_phoff);
 
+    // 
     for (j = 0; j < ehdr->e_phnum; j++){
         switch(phdr[j].p_type){
             case PT_LOAD:
                 if (phdr[j].p_vaddr <= ehdr->e_entry){
+                    // the PT_LOAD section with entry point, is the .text 
                     debug("  => Found .text section.\n");
                     base_addr = phdr[j].p_vaddr;
                 }else{
+                    // the others are .data
                     debug("  => Found .data section.\n");
                     data_addr = phdr[j].p_vaddr - phdr[j].p_offset;
                 }
@@ -410,6 +423,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // rebuild dynamic links
     if (dynamic) {
         dyn = (ElfX_Dyn *)(newelf + phdr[dynamic].p_offset); 
         j=0;
@@ -424,11 +438,13 @@ int main(int argc, char *argv[]) {
                     f = ptrsize*3;
                     memcpy (&adata, &newelf[dyn[j].d_un.d_ptr-data_addr+f], sizeof(adata));
 
+                    // go forward looking for plt section
                     while (adata != 0) {
 						if (adata  < phdr[dynamic].p_vaddr+filesize){
                             adata = adata - 0x10*((f/ptrsize)-3);
                             goto plt;
                         }
+                        // look in the next addr
                         f += ptrsize;
                         memcpy(&adata, &newelf[dyn[j].d_un.d_ptr - data_addr + f], sizeof(adata));
                         if ((f>1200)) {
@@ -437,12 +453,12 @@ int main(int argc, char *argv[]) {
                         }
                    }
                 plt:
+                    // found plt offset
                     plt_off = adata;
-                    debug("  => Fixing .rel.plt section.\n");
-
                     f = ptrsize*3;
                     memcpy (&adata, &newelf[dyn[j].d_un.d_ptr - data_addr + f], sizeof(adata));
                     while (adata != 0) {
+                        // if it was resolved, put the correct value
                         if (adata != plt_off+0x10*((f/ptrsize)-3)){
                             adata = plt_off+0x10*((f/ptrsize)-3);
                             memcpy(&newelf[dyn[j].d_un.d_ptr-data_addr+f], &adata, sizeof(adata));
@@ -464,7 +480,7 @@ int main(int argc, char *argv[]) {
         }
     end:
 
-
+    // write the new ELF into a file
     if (outfile){
         if (( fp = fopen(outfile,"w+")) == NULL ) quit(" [!] Can't create file %s.\n", outfile);
         if (fwrite(newelf, 1, filesize, fp) != filesize) quit(" [!] Error writing file.\n");
@@ -473,6 +489,7 @@ int main(int argc, char *argv[]) {
         printf(" [*] File %s saved!\n", outfile);
     } 
 
+    // if -f was used, kill the program
     if (execfile) {
         printf(" [*] Killing %s\n", execfile);
         kill(pid, 15);
