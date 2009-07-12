@@ -244,11 +244,7 @@ int main(int argc, char *argv[]) {
 
     ElfX_Ehdr *ehdr;
     ElfX_Phdr *phdr;
-    uintX_t adata;
-    int plt_off;
-
-    ElfX_Dyn  *dyn;   // Pointer to Dynamic array
-    int f = 0;                
+    ElfX_Dyn  *dyn;
     spam();
 
     if (argc < 2) usage(argv[0]);
@@ -351,6 +347,10 @@ int main(int argc, char *argv[]) {
             switch (dyn[j].d_tag){
                 case DT_PLTGOT:
 #if __x86_64__ || __i386__                
+                    uintX_t adata;
+                    int plt_off;
+                    int f = 0;                
+
 					debug("  => Fixing .got.plt section.\n");
 					// Clean the two addr on .got.plt, that are at offset + one addr
                     memset(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize], 0, ptrsize*2);
@@ -390,6 +390,7 @@ int main(int argc, char *argv[]) {
 					debug("  => I can't fix .got section on MIPS, hacking it.\n");
 					debug("  !! This file can be only executed in this system.\n");
                     memcpy(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize*2], &base_addr, ptrsize);
+                    goto end;
 #endif
                 } 
                 j++;
