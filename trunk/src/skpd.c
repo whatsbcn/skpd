@@ -406,10 +406,12 @@ int main(int argc, char *argv[]) {
         chmod(outfile, 00755);
         printf(" [*] File %s saved!\n", outfile);
     } 
+
     if (execfile) {
-        debug("  => Killing %s\n", execfile);
+        printf(" [*] Killing %s\n", execfile);
         kill(pid, 15);
     }
+
     free(maps);
     free(buff);
     free(newelf);
