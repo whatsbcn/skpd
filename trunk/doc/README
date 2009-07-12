@@ -1,4 +1,4 @@
-skpd 1.0 Process dump to executable ELF for linux
+skpd 1.2 Process dump to executable ELF for linux
 ==================================================
 
 Albert Sellares <whats[@t]wekk.net>
@@ -14,14 +14,15 @@ Features:
  * 32 and 64 bits support.
  * Generates an ELF file from a running process.
  * If the original file was encrypted, the new one will not.
+ * i386, x86_64, MIPSEL
 
 Use:
 ----
 
- skpd 1.0 - <whats[@t]wekk.net>
+ skpd 1.2 - <whats[@t]wekk.net>
  ==============================
  Process to exec ELF for linux
- Usage: ./skpd -p pid [-o output_file] [-v]
+ Usage: ./skpd {-p pid | -f file} [-o output_file] [-v]
 
  1- Launch telnet client on one terminal
 
@@ -41,10 +42,6 @@ Use:
  ==============================
   [*] Attached to pid 7029.
   [*] Reading /proc/7029/maps ...
-   => Stack found on: 0xbff0f000-0xbff24000 (86016 bytes)
-  [*] Found 35 maps.
-  [*] Found 2 possible auxv.
-  [*] Auxv selected: off:0x8048034 num:0x9
   [*] Rebuilding ELF headers.
   [*] File t saved!
   [*] Done!
