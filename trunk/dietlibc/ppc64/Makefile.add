@@ -1,5 +1,0 @@
-
-CFLAGS+=-Os -mpowerpc64
-VPATH:=ppc64:syscalls.s:$(VPATH)
-
-CC+=-m64
