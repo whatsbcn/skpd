@@ -68,7 +68,7 @@ int pid = 0;
 int ptrsize = 0;
 
 void spam() {
-    printf("skpd 1.2 - <whats[@t]wekk.net>\n"
+    printf("skpd 1.3 - <whats[@t]wekk.net>\n"
            "==============================\n");
 }
 
@@ -82,7 +82,7 @@ void debug(const char * format, ...){
 }
 
 void usage (char *prg){
-    printf ("Process to exec ELF for linux i386, x86_64 and MIPSEL\n"
+    printf ("Process to exec ELF in linux and BSD for i386, x86_64 and MIPSEL\n"
             "Usage: %s {-p pid | -f file} [-o output_file] [-v]\n", prg);
     fflush(stdout);
     exit(-1);
