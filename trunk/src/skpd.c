@@ -247,6 +247,12 @@ int main(int argc, char *argv[]) {
     ElfX_Dyn  *dyn;
     spam();
 
+#if __x86_64__ || __i386__                
+    uintX_t adata;
+    int plt_off;
+    int f = 0;                
+#endif
+
     if (argc < 2) usage(argv[0]);
 
     while ((opt = getopt (argc, argv, "vhp:o:f:")) != -1) {
@@ -347,10 +353,6 @@ int main(int argc, char *argv[]) {
             switch (dyn[j].d_tag){
                 case DT_PLTGOT:
 #if __x86_64__ || __i386__                
-                    uintX_t adata;
-                    int plt_off;
-                    int f = 0;                
-
 					debug("  => Fixing .got.plt section.\n");
 					// Clean the two addr on .got.plt, that are at offset + one addr
                     memset(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize], 0, ptrsize*2);
