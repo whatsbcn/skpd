@@ -23,7 +23,7 @@
 #include <stdarg.h>
 #include <elf.h>
 
-#if __x86_64
+#if __x86_64__
 #define ElfX_auxv_t Elf64_auxv_t
 #define ElfX_Dyn Elf64_Dyn
 #define ElfX_Ehdr Elf64_Ehdr
@@ -42,6 +42,8 @@
 #define ElfX_Sym Elf32_Sym
 #define uintX_t uint32_t
 #endif
+
+#define ELF_ADDR_MASK   0xffffffffffff8000LL
 
 // Represents a memory range used by the program
 struct mentry {
@@ -339,6 +341,7 @@ int main(int argc, char *argv[]) {
         while (dyn[j].d_tag != DT_NULL){
             switch (dyn[j].d_tag){
                 case DT_PLTGOT:
+#if __x86_64__ || __i386__                
 					debug("  => Fixing .got.plt section.\n");
 					// Clean the two addr on .got.plt, that are at offset + one addr
                     memset(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize], 0, ptrsize*2);
@@ -373,7 +376,15 @@ int main(int argc, char *argv[]) {
                         memcpy (&adata, &newelf[dyn[j].d_un.d_ptr-data_addr+f], sizeof(adata));
                     }
                     break;
+#endif
+#if __MIPSEL__
+					debug("  => I can't fix .got section on MIPS, hacking it.\n");
+					debug("  !! This file can be only executed in this system.\n");
+                    memcpy(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize*2], &base_addr, ptrsize);
+#endif
                 } 
+                case 
+
                 j++;
             }
         }

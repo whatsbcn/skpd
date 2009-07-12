@@ -1,2 +1,6 @@
  * Use core dumps to generate the ELF file
  * Remove dependece of /proc
+ * MIPSEL
+ * -f file
+ * auto-detect if it is an elf32 or elf64
+ * remove dietlibc 
