@@ -124,8 +124,8 @@ void mread(unsigned long addr, unsigned int size, unsigned long *dest){
     bzero(dest, size);
     errno = 0;
     debug("  => mread addr:0x%lx, size:%ld bytes, dest:%p\n", addr, size, dest);
-    for (c = 0; c < size/4; c++) {
-        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*4, 0);
+    for (c = 0; c < size/ptrsize; c++) {
+        dest[c] = ptrace(PTRACE_PEEKTEXT, pid, addr+c*ptrsize, 0);
         if(errno != 0) {
             printf("  => 0x%lx ", addr+c); fflush(stdout);
             perror("ptrace");
@@ -242,12 +242,12 @@ int main(int argc, char *argv[]) {
     FILE *fp;
     ptrsize = sizeof(int *);
 
-    Elf32_Ehdr *ehdr;
-    Elf32_Phdr *phdr;
+    ElfX_Ehdr *ehdr;
+    ElfX_Phdr *phdr;
     uintX_t adata;
     int plt_off;
 
-    Elf32_Dyn  *dyn;   // Pointer to Dynamic array
+    ElfX_Dyn  *dyn;   // Pointer to Dynamic array
     int f = 0;                
     spam();
 
