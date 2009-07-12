@@ -43,8 +43,6 @@
 #define uintX_t uint32_t
 #endif
 
-#define ELF_ADDR_MASK   0xffffffffffff8000LL
-
 // Represents a memory range used by the program
 struct mentry {
     unsigned int top;
@@ -62,7 +60,7 @@ int pid = 0;
 int ptrsize = 0;
 
 void spam() {
-    printf("skpd 1.1 - <whats[@t]wekk.net>\n"
+    printf("skpd 1.2 - <whats[@t]wekk.net>\n"
            "==============================\n");
 }
 
@@ -77,7 +75,7 @@ void debug(const char * format, ...){
 
 void usage (char *prg){
     printf ("Process to exec ELF for linux\n"
-            "Usage: %s -p pid [-o output_file] [-v]\n", prg);
+            "Usage: %s {-p pid | -f file} [-o output_file] [-v]\n", prg);
     fflush(stdout);
     exit(-1);
 } 
@@ -234,13 +232,13 @@ int check_range(struct ph *vauxv, unsigned int iauxv, struct mentry *maps, unsig
 }
 
 int main(int argc, char *argv[]) {
-    int opt;
+    int opt, devnullfd;
     unsigned long stacktop, stackbase, stacksize, nmaps, nauxv;
     unsigned int i, j, filesize = 0, dynamic = 0, base_addr = 0, data_addr = 0;
     unsigned long *buff;    
     struct ph *vauxv;
     struct mentry *maps;
-    char *newelf = 0, *outfile = 0;
+    char *newelf = 0, *outfile = 0, *execfile = 0;
     FILE *fp;
     ptrsize = sizeof(int *);
 
@@ -255,18 +253,29 @@ int main(int argc, char *argv[]) {
 
     if (argc < 2) usage(argv[0]);
 
-    while ((opt = getopt (argc, argv, "vhp:o:")) != -1) {
+    while ((opt = getopt (argc, argv, "vhp:o:f:")) != -1) {
         switch (opt){
             case 'h': usage(argv[0]); break;
             case 'v': verbose = 1; break;
             case 'p': pid = strtol(optarg, 0,  10); break;
             case 'o': outfile = optarg; break;
             case '?': quit (" [!] Uknown argument.", -1); break;
+            case 'f': execfile = optarg; break;
             default : usage(argv[0]); break;
         } 
     }
 
-    if (!pid) quit(" [!] Uknown pid.",-1);
+    if (execfile) {
+        printf(" [*] Launching %s > /dev/null.\n", execfile);
+        pid = fork();
+        if (pid == 0) {
+            devnullfd = open("/dev/null", O_RDWR);
+            dup2(devnullfd, 1);
+            execl(execfile, execfile, (const char *) NULL);
+        }          
+    }
+    
+    if (!pid) quit(" [!] Uknown pid or file.");
 
     signal(SIGILL, die);
     signal(SIGBUS, die);
@@ -277,18 +286,18 @@ int main(int argc, char *argv[]) {
 
     attach();
     if (!(nmaps = readmaps(&stacktop, &stackbase, &stacksize, &maps))) quit(" [!] Stack not found.\n");
-    printf(" [*] Found %ld maps.\n", nmaps);
+    debug(" [*] Found %ld maps.\n", nmaps);
 
     buff = malloc(stacksize);
     if (!buff) quit(" [!] Malloc error.\n");
     stackread(stacktop, stacksize, buff);
 
 	if (!(nauxv = find_auxv(buff, stacksize, &vauxv))) quit(" [!] Auxiliar vector not found.\n");
-    printf(" [*] Found %ld possible auxv.\n", nauxv);
+    debug(" [*] Found %ld possible auxv.\n", nauxv);
 
     for (i = 0; i < nauxv && !check_range(vauxv, i, maps, nmaps); i++);
     if (i == nauxv) quit(" [!] All the auxv are out of range.\n");
-    printf(" [*] Auxv selected: off:0x%lx num:0x%x\n", vauxv[i].off, vauxv[i].num);
+    debug(" [*] Auxv selected: off:0x%lx num:0x%x\n", vauxv[i].off, vauxv[i].num);
     
     buff = realloc(buff, vauxv[i].num*sizeof(ElfX_Phdr));
     mread(vauxv[i].off, vauxv[i].num*sizeof(ElfX_Phdr), (unsigned long *)buff);
@@ -383,8 +392,6 @@ int main(int argc, char *argv[]) {
                     memcpy(&newelf[dyn[j].d_un.d_ptr - data_addr + ptrsize*2], &base_addr, ptrsize);
 #endif
                 } 
-                case 
-
                 j++;
             }
         }
@@ -398,6 +405,10 @@ int main(int argc, char *argv[]) {
         chmod(outfile, 00755);
         printf(" [*] File %s saved!\n", outfile);
     } 
+    if (execfile) {
+        debug("  => Killing %s\n", execfile);
+        kill(pid, 15);
+    }
     free(maps);
     free(buff);
     free(newelf);
