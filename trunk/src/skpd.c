@@ -74,7 +74,7 @@ void debug(const char * format, ...){
 }
 
 void usage (char *prg){
-    printf ("Process to exec ELF for linux\n"
+    printf ("Process to exec ELF for linux i386, x86_64 and MIPSEL\n"
             "Usage: %s {-p pid | -f file} [-o output_file] [-v]\n", prg);
     fflush(stdout);
     exit(-1);
@@ -274,7 +274,9 @@ int main(int argc, char *argv[]) {
             devnullfd = open("/dev/null", O_RDWR);
             dup2(devnullfd, 1);
             execl(execfile, execfile, (const char *) NULL);
-        }          
+			
+        }    
+		sleep(1);
     }
     
     if (!pid) quit(" [!] Uknown pid or file.");
