@@ -237,7 +237,7 @@ int find_auxv(unsigned long *stack, unsigned int size,  struct ph **vauxv){
     ElfX_auxv_t *auxv2 = 0;
     auxv = (ElfX_auxv_t *)ptr;
     while (ptr < (char *)stack+size-sizeof(ElfX_auxv_t)) {
-        while (auxv->a_type != 6 && auxv->a_un.a_val != 1000 && ptr < (char*)stack+size-sizeof(ElfX_auxv_t)) {
+        while (auxv->a_type != 6 && auxv->a_un.a_val != 0x1000 && ptr < (char*)stack+size-sizeof(ElfX_auxv_t)) {
             ptr++;
             auxv = (ElfX_auxv_t *)ptr;
             auxv2 = auxv;
