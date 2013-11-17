@@ -1,7 +1,8 @@
 skpd - Process dump to executable ELF for linux
 ===============================================
 
-h2. Features:
+Features:
+---------
 
 * It supports:
 * static binaries.
@@ -13,22 +14,25 @@ h2. Features:
 * If the original file was encrypted, the new one will not.
 * i386, x86_64, MIPSEL
 
-h2. Use:
+Use:
+----
 ``
  Usage: ./skpd {-p pid | -f file} [-o output_file] [-v]
 ``
- 1- Launch telnet client on one terminal
+1. Launch telnet client on one terminal
 ``
   whats@x61s:~$ telnet
   telnet>
 ``
- 2- Search the pid
+
+2. Search the pid
 ``
   whats@x61s:~$ ps aux | grep telnet
   whats     7029  0.0  0.0   3088  1212 pts/1    S+   21:36   0:00 telnet
   whats     7031  0.0  0.0   2952   740 pts/0    S+   21:36   0:00 grep --colour=auto telnet
 ``
- 3- Launch skpd dumping the process to the new file t
+
+3. Launch skpd dumping the process to the new file t
 
 ``
  whats@x61s:~/code/pd/skpd/src$ ./skpd -p 7029 -o t
@@ -41,7 +45,8 @@ h2. Use:
   [*] Done!
   [*] Dettached.
 ``
- 4- Exec the new created file
+
+4. Exec the new created file
 ``
   whats@x61s:~/code/pd/skpd/src$ ./t
   t> open www.wekk.net 80
@@ -49,8 +54,9 @@ h2. Use:
   Connected to www.wekk.net.
   Escape character is '^]'.
 ``
-h2. References:
 
+References:
+-----------
 
  * This is a process dump based on ilo pd
     - http://www.phrack.com/issues.html?issue=63&id=12&mode=txt
