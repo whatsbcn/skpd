@@ -19,18 +19,21 @@ Use:
     Usage: ./skpd {-p pid | -f file} [-o output_file] [-v]
 
 1. Launch telnet client on one terminal
-
+```
     whats@x61s:~$ telnet
     telnet>
-
+```
 2. Search the pid
 
+```
     whats@x61s:~$ ps aux | grep telnet
     whats     7029  0.0  0.0   3088  1212 pts/1    S+   21:36   0:00 telnet
     whats     7031  0.0  0.0   2952   740 pts/0    S+   21:36   0:00 grep --colour=auto telnet
+```
 
 3. Launch skpd dumping the process to the new file t
 
+```
    whats@x61s:~/code/pd/skpd/src$ ./skpd -p 7029 -o t
    skpd 1.0 - <whats[@t]wekk.net>
    ==============================
@@ -40,14 +43,17 @@ Use:
     [*] File t saved!
     [*] Done!
     [*] Dettached.
+```
 
 4. Exec the new created file
 
+```
     whats@x61s:~/code/pd/skpd/src$ ./t
     t> open www.wekk.net 80
     Trying 64.22.71.90...
     Connected to www.wekk.net.
     Escape character is '^]'.
+```
 
 
 References:
