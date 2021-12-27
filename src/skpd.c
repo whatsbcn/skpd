@@ -297,7 +297,7 @@ int main(int argc, char *argv[]) {
     unsigned long stacktop, stackbase, stacksize, nmaps, nauxv;
     unsigned int i, j, filesize = 0, dynamic = 0, base_addr = 0, data_addr = 0;
     unsigned long *buff;    
-    struct ph *vauxv;
+    struct ph *vauxv, tmp;
     struct mentry *maps;
     char *newelf = 0, *outfile = 0, *execfile = 0;
     FILE *fp;
@@ -364,6 +364,15 @@ int main(int argc, char *argv[]) {
     // found PHDR in stack
 	if (!(nauxv = find_auxv(buff, stacksize, &vauxv))) quit(" [!] Auxiliar vector not found.\n");
     debug(" [*] Found %ld possible auxv.\n", nauxv);
+
+    // prioritize AT_PHDRs with more segments
+    for (i = 0; i < nauxv; i++)
+        for (j = i; j < nauxv; j++)
+            if (vauxv[i].num < vauxv[j].num) {
+                tmp = vauxv[i];
+                vauxv[i] = vauxv[j];
+                vauxv[j] = tmp;
+            }
 
     // check that it is a valid PHDR
     for (i = 0; i < nauxv && !check_range(vauxv, i, maps, nmaps); i++);
